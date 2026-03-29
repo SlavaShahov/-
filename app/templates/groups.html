@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Тренировочные группы</h2>
+{% if error %}
+  <p class="warn">PostgreSQL недоступен: {{ error }}</p>
+{% else %}
+  <table>
+    <thead>
+      <tr>
+        <th>Группа</th>
+        <th>Вид спорта</th>
+        <th>Тренер</th>
+        <th>Количество участников</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>
+          <a href="{{ url_for('group_detail_page', group_id=row.group_id) }}">{{ row.group_name }}</a>
+        </td>
+        <td>{{ row.martial_art }}</td>
+        <td>{{ row.trainer_name }}</td>
+        <td>{{ row.members_count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}

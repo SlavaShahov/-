@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Состав группы</h2>
+{% if error %}
+  <p class="warn">Ошибка: {{ error }}</p>
+{% elif not group_info %}
+  <p class="warn">Группа не найдена.</p>
+{% else %}
+  <p class="info">
+    <strong>{{ group_info.group_name }}</strong> |
+    {{ group_info.martial_art }} |
+    {{ group_info.level }} |
+    Тренер: {{ group_info.trainer_name }}
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Участник</th>
+        <th>Дата рождения</th>
+        <th>Пол</th>
+        <th>Абонемент с</th>
+        <th>Абонемент по</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in members_rows %}
+      <tr>
+        <td>{{ row.full_name }}</td>
+        <td>{{ row.birth_date }}</td>
+        <td>{{ row.gender }}</td>
+        <td>{{ row.start_date }}</td>
+        <td>{{ row.end_date }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}

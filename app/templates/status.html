@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Состояние среды</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Сервис</th>
+      <th>Статус</th>
+      <th>Комментарий</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for name, value in status.items() %}
+    <tr>
+      <td>{{ name }}</td>
+      <td>
+        {% if value.ok %}
+          <span class="ok">OK</span>
+        {% else %}
+          <span class="warn">ERROR</span>
+        {% endif %}
+      </td>
+      <td>{{ value.error or "Доступен" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<p class="info">
+  При отключении любой базы приложение продолжит работу, но соответствующие страницы покажут
+  предупреждение и частичные данные.
+</p>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Аналитика по БД</h2>
+
+{% if club_avg_rating is not none %}
+  <p class="info">Средний рейтинг клуба (MongoDB): <strong>{{ "%.2f"|format(club_avg_rating) }}</strong></p>
+{% else %}
+  <p class="info">Средний рейтинг клуба (MongoDB): пока нет данных.</p>
+{% endif %}
+
+<h3>PostgreSQL: средняя цена абонемента по виду спорта</h3>
+{% if pg_error %}
+  <p class="warn">PostgreSQL недоступен: {{ pg_error }}</p>
+{% else %}
+  <table>
+    <thead>
+      <tr>
+        <th>Вид спорта</th>
+        <th>Средняя цена</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in pg_rows %}
+      <tr>
+        <td>{{ row.martial_art }}</td>
+        <td>{{ row.avg_subscription_price }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+
+<h3>MongoDB (aggregation): средний рейтинг по тренеру</h3>
+{% if mongo_error %}
+  <p class="warn">MongoDB недоступен: {{ mongo_error }}</p>
+{% else %}
+  <table>
+    <thead>
+      <tr>
+        <th>Тренер</th>
+        <th>Средний рейтинг</th>
+        <th>Количество отзывов</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in mongo_rows %}
+      <tr>
+        <td>{{ row.trainer_name }}</td>
+        <td>{{ "%.2f"|format(row.avg_rating) }}</td>
+        <td>{{ row.count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}

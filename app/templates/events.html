@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>События клуба (MongoDB)</h2>
+{% if error %}
+  <p class="warn">MongoDB недоступен: {{ error }}</p>
+{% endif %}
+
+{% if not error %}
+  <table>
+    <thead>
+      <tr>
+        <th>Событие</th>
+        <th>Направление</th>
+        <th>Дата</th>
+        <th>Лимит участников</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.title }}</td>
+        <td>{{ row.martial_art }}</td>
+        <td>{{ row.event_date.strftime("%Y-%m-%d %H:%M") }}</td>
+        <td>{{ row.participants_limit }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}

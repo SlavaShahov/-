@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Отзывы</h2>
+
+{% if error %}
+  <p class="warn">{{ error }}</p>
+{% endif %}
+{% if message %}
+  <p class="ok">{{ message }}</p>
+{% endif %}
+
+{% if club_avg_rating is not none %}
+  <p class="info">Средний рейтинг клуба: <strong>{{ "%.2f"|format(club_avg_rating) }}</strong></p>
+{% else %}
+  <p class="info">Средний рейтинг клуба: пока нет отзывов.</p>
+{% endif %}
+
+<div class="forms-grid">
+  <section class="form-card">
+    <h3>Оставить отзыв на тренера</h3>
+    <form method="post">
+      <input type="hidden" name="action" value="add_trainer_review">
+      <label>Ваше имя</label>
+      <input name="member_name" required>
+      <label>Тренер</label>
+      <select name="trainer_name" required>
+        <option value="">Выберите тренера</option>
+        {% for trainer in trainers %}
+          <option value="{{ trainer.full_name }}">{{ trainer.full_name }}</option>
+        {% endfor %}
+      </select>
+      <label>Оценка (1-5)</label>
+      <input type="number" min="1" max="5" name="rating" required>
+      <label>Комментарий</label>
+      <textarea name="comment"></textarea>
+      <button type="submit">Добавить отзыв</button>
+    </form>
+  </section>
+
+  <section class="form-card">
+    <h3>Оставить отзыв на клуб</h3>
+    <form method="post">
+      <input type="hidden" name="action" value="add_club_review">
+      <label>Ваше имя</label>
+      <input name="author" required>
+      <label>Оценка (1-5)</label>
+      <input type="number" min="1" max="5" name="rating" required>
+      <label>Комментарий</label>
+      <textarea name="comment"></textarea>
+      <button type="submit">Добавить отзыв</button>
+    </form>
+  </section>
+</div>
+
+<h3>Отзывы на тренеров</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Автор</th>
+      <th>Тренер</th>
+      <th>Оценка</th>
+      <th>Комментарий</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in trainer_reviews %}
+    <tr>
+      <td>{{ row.member_name }}</td>
+      <td>{{ row.trainer_name }}</td>
+      <td>{{ row.rating }}</td>
+      <td>{{ row.comment }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3>Средний рейтинг по тренерам</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Тренер</th>
+      <th>Средний рейтинг</th>
+      <th>Количество отзывов</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in trainer_avg_rows %}
+    <tr>
+      <td>{{ row.trainer_name }}</td>
+      <td>{{ "%.2f"|format(row.avg_rating) }}</td>
+      <td>{{ row.count }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3>Отзывы на клуб</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Автор</th>
+      <th>Оценка</th>
+      <th>Комментарий</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in club_reviews %}
+    <tr>
+      <td>{{ row.author }}</td>
+      <td>{{ row.rating }}</td>
+      <td>{{ row.comment }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

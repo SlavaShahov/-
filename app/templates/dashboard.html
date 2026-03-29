@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Обзор клуба</h2>
+
+{% if data_error %}
+  <p class="warn">PostgreSQL недоступен: {{ data_error }}</p>
+{% endif %}
+{% if ratings_error %}
+  <p class="warn">MongoDB/Redis недоступен для рейтингов: {{ ratings_error }}</p>
+{% endif %}
+
+<div class="cards">
+  <div class="card">
+    <h3>Участники</h3>
+    <p>{{ stats.members_count }}</p>
+  </div>
+  <div class="card">
+    <h3>Группы</h3>
+    <p>{{ stats.groups_count }}</p>
+  </div>
+  <div class="card">
+    <h3>Тренеры</h3>
+    <p>{{ stats.trainers_count }}</p>
+  </div>
+</div>
+
+<h3>Рейтинги (из Redis с TTL)</h3>
+{% if ratings.club_avg_rating is not none %}
+  <p class="info">Средний рейтинг клуба: <strong>{{ "%.2f"|format(ratings.club_avg_rating) }}</strong></p>
+{% else %}
+  <p class="info">Средний рейтинг клуба: пока нет данных.</p>
+{% endif %}
+
+<table>
+  <thead>
+    <tr>
+      <th>Тренер</th>
+      <th>Средний рейтинг</th>
+      <th>Количество отзывов</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in ratings.trainers_avg %}
+    <tr>
+      <td>{{ row.trainer_name }}</td>
+      <td>{{ "%.2f"|format(row.avg_rating) }}</td>
+      <td>{{ row.count }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if from_cache %}
+  <p class="info">Данные загружены из Redis-кеша.</p>
+{% else %}
+  <p class="info">Данные загружены из PostgreSQL и сохранены в Redis (TTL).</p>
+{% endif %}
+{% if ratings_from_cache %}
+  <p class="info">Рейтинги загружены из Redis-кеша.</p>
+{% else %}
+  <p class="info">Рейтинги получены из MongoDB и сохранены в Redis (TTL).</p>
+{% endif %}
+{% endblock %}

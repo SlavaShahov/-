@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Управление клубом</h2>
+
+{% if error %}
+  <div class="message error" style="background: #fee2e2; border-left: 4px solid #dc2626; padding: 12px; margin-bottom: 20px; border-radius: 4px;">
+    <strong>❌ Ошибка:</strong> {{ error }}
+  </div>
+{% endif %}
+
+{% if message %}
+  <div class="message success" style="background: #dcfce7; border-left: 4px solid #16a34a; padding: 12px; margin-bottom: 20px; border-radius: 4px;">
+    <strong>✅ Успешно!</strong> {{ message }}
+  </div>
+{% endif %}
+
+{% if not postgres_ok %}
+  <div class="message warning" style="background: #fef3c7; border-left: 4px solid #d97706; padding: 12px; margin-bottom: 20px; border-radius: 4px;">
+    <strong>⚠️ Внимание:</strong> PostgreSQL недоступен: добавление тренеров, групп и участников временно отключено.
+  </div>
+{% endif %}
+
+{% if not mongo_ok %}
+  <div class="message warning" style="background: #fef3c7; border-left: 4px solid #d97706; padding: 12px; margin-bottom: 20px; border-radius: 4px;">
+    <strong>⚠️ Внимание:</strong> MongoDB недоступен: добавление событий временно отключено.
+  </div>
+{% endif %}
+
+<div class="forms-grid">
+  <!-- Форма добавления тренера -->
+  <section class="form-card">
+    <h3>➕ Добавить тренера</h3>
+    {% if not postgres_ok %}<p class="warn">⚠️ Недоступно</p>{% endif %}
+    <form method="post">
+      <input type="hidden" name="action" value="add_trainer">
+      <label>ФИО</label>
+      <input name="full_name" required {% if not postgres_ok %}disabled{% endif %}>
+      <label>Телефон</label>
+      <input name="phone" required {% if not postgres_ok %}disabled{% endif %}>
+      <label>Стаж (лет)</label>
+      <input type="number" min="1" name="experience_years" required {% if not postgres_ok %}disabled{% endif %}>
+      <button type="submit" {% if not postgres_ok %}disabled{% endif %}>Добавить тренера</button>
+    </form>
+  </section>
+
+  <!-- Форма добавления группы -->
+  <section class="form-card">
+    <h3>➕ Добавить группу</h3>
+    {% if not postgres_ok %}<p class="warn">⚠️ Недоступно</p>{% endif %}
+    <form method="post">
+      <input type="hidden" name="action" value="add_group">
+      <label>Название группы</label>
+      <input name="name" required {% if not postgres_ok %}disabled{% endif %}>
+
+      <label>Вид единоборств</label>
+      <select name="art_id" required {% if not postgres_ok %}disabled{% endif %}>
+        <option value="">Выберите направление</option>
+        {% for art in arts %}
+          <option value="{{ art.art_id }}">{{ art.name }}</option>
+        {% endfor %}
+      </select>
+
+      <label>Тренер</label>
+      <select name="trainer_id" {% if not postgres_ok %}disabled{% endif %}>
+        <option value="">Без тренера</option>
+        {% for trainer in trainers %}
+          <option value="{{ trainer.trainer_id }}">{{ trainer.full_name }}</option>
+        {% endfor %}
+      </select>
+
+      <label>Уровень</label>
+      <select name="level" required {% if not postgres_ok %}disabled{% endif %}>
+        <option value="начинающий">🥋 начинающий</option>
+        <option value="средний">⚡ средний</option>
+        <option value="продвинутый">🔥 продвинутый</option>
+      </select>
+      <button type="submit" {% if not postgres_ok %}disabled{% endif %}>Добавить группу</button>
+    </form>
+  </section>
+
+  <!-- Форма добавления участника в группу -->
+  <section class="form-card">
+    <h3>👤 Добавить участника в группу</h3>
+    {% if not postgres_ok %}<p class="warn">⚠️ Недоступно</p>{% endif %}
+    <form method="post">
+      <input type="hidden" name="action" value="add_member_to_group">
+      <label>ФИО участника</label>
+      <input name="member_full_name" required {% if not postgres_ok %}disabled{% endif %}>
+      <label>Дата рождения</label>
+      <input type="date" name="birth_date" required {% if not postgres_ok %}disabled{% endif %}>
+      <label>Телефон (необязательно)</label>
+      <input name="member_phone" {% if not postgres_ok %}disabled{% endif %}>
+      <label>Пол</label>
+      <select name="gender" required {% if not postgres_ok %}disabled{% endif %}>
+        <option value="M">👨 Мужской (M)</option>
+        <option value="F">👩 Женский (F)</option>
+      </select>
+      <label>Группа</label>
+      <select name="group_id" required {% if not postgres_ok %}disabled{% endif %}>
+        <option value="">Выберите группу</option>
+        {% for group in groups %}
+          <option value="{{ group.group_id }}">{{ group.name }}</option>
+        {% endfor %}
+      </select>
+      <label>Дата начала абонемента</label>
+      <input type="date" name="start_date" required {% if not postgres_ok %}disabled{% endif %}>
+      <label>Дата окончания абонемента</label>
+      <input type="date" name="end_date" required {% if not postgres_ok %}disabled{% endif %}>
+      <label>Стоимость (₽)</label>
+      <input type="number" step="0.01" min="1" name="price" required {% if not postgres_ok %}disabled{% endif %}>
+      <button type="submit" {% if not postgres_ok %}disabled{% endif %}>Добавить участника</button>
+    </form>
+  </section>
+
+  <!-- Форма добавления события (MongoDB) -->
+  <section class="form-card">
+    <h3>📅 Добавить событие (MongoDB)</h3>
+    {% if not mongo_ok %}<p class="warn">⚠️ Недоступно</p>{% endif %}
+    <form method="post">
+      <input type="hidden" name="action" value="add_event">
+      <label>Название события</label>
+      <input name="title" required {% if not mongo_ok %}disabled{% endif %}>
+      <label>Направление</label>
+      <select name="martial_art" required {% if not mongo_ok %}disabled{% endif %}>
+        <option value="">Выберите направление</option>
+        {% for art in arts %}
+          <option value="{{ art.name }}">{{ art.name }}</option>
+        {% endfor %}
+      </select>
+      <label>Дата и время</label>
+      <input type="datetime-local" name="event_date" required {% if not mongo_ok %}disabled{% endif %}>
+      <label>Лимит участников</label>
+      <input type="number" min="1" name="participants_limit" required {% if not mongo_ok %}disabled{% endif %}>
+      <button type="submit" {% if not mongo_ok %}disabled{% endif %}>Добавить событие</button>
+    </form>
+  </section>
+</div>
+
+<style>
+  .forms-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+  }
+
+  .form-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+
+  .form-card h3 {
+    margin-top: 0;
+    margin-bottom: 16px;
+    color: #1e293b;
+    font-size: 1.1rem;
+  }
+
+  .form-card label {
+    display: block;
+    margin-top: 12px;
+    margin-bottom: 4px;
+    font-weight: 500;
+    font-size: 0.85rem;
+    color: #475569;
+  }
+
+  .form-card input, .form-card select, .form-card textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+
+  .form-card button {
+    margin-top: 16px;
+    width: 100%;
+    background: #0f172a;
+    color: white;
+    border: none;
+    padding: 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .form-card button:hover:not(:disabled) {
+    background: #1e293b;
+  }
+
+  .form-card button:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
+  }
+
+  .warn {
+    color: #dc2626;
+    font-size: 0.85rem;
+    margin-bottom: 12px;
+    padding: 6px;
+    background: #fee2e2;
+    border-radius: 4px;
+    text-align: center;
+  }
+</style>
+{% endblock %}

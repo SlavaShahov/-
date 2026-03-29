@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Тренеры</h2>
+{% if error %}
+  <p class="warn">PostgreSQL недоступен: {{ error }}</p>
+{% else %}
+  <table>
+    <thead>
+      <tr>
+        <th>ФИО</th>
+        <th>Стаж (лет)</th>
+        <th>Ведет групп</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.trainer_name }}</td>
+        <td>{{ row.experience_years }}</td>
+        <td>{{ row.groups_count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}
