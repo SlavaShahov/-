@@ -10,9 +10,12 @@ from pymongo import MongoClient
 from redis import Redis
 from redis.exceptions import RedisError
 
-
 app = Flask(__name__)
 
+
+# ===================================================================
+# ========================== КОНФИГУРАЦИЯ ===========================
+# ===================================================================
 
 def _env(name: str, default: str) -> str:
     return os.getenv(name, default)
@@ -46,7 +49,12 @@ REDIS_TTL_SECONDS = int(_env("REDIS_TTL_SECONDS", "120"))
 INTERNET_CHECK_HOST = _env("INTERNET_CHECK_HOST", "example.com")
 
 
+# ===================================================================
+# ======================= ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===================
+# ===================================================================
+
 def check_internet() -> bool:
+    """Проверка доступа в интернет"""
     try:
         socket.gethostbyname(INTERNET_CHECK_HOST)
         return True
@@ -55,6 +63,7 @@ def check_internet() -> bool:
 
 
 def pg_query(sql: str):
+    """Выполнение SELECT-запросов к PostgreSQL"""
     try:
         with connect(PG_DSN, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
@@ -65,6 +74,7 @@ def pg_query(sql: str):
 
 
 def pg_execute(sql: str, params: tuple):
+    """Выполнение INSERT/UPDATE/DELETE с обработкой дубликатов"""
     try:
         with connect(PG_DSN) as conn:
             with conn.cursor() as cur:
@@ -79,6 +89,7 @@ def pg_execute(sql: str, params: tuple):
 
 
 def mongo_collection(name: str):
+    """Получение коллекции MongoDB с проверкой подключения"""
     try:
         client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=1500)
         client.admin.command("ping")
@@ -89,6 +100,7 @@ def mongo_collection(name: str):
 
 
 def redis_client():
+    """Получение клиента Redis с проверкой подключения"""
     try:
         r = Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, socket_timeout=1.5)
         r.ping()
@@ -97,7 +109,34 @@ def redis_client():
         return None, service_error_message("redis")
 
 
+# ===================================================================
+# ======================= ОЧИСТКА КЕША REDIS ========================
+# ===================================================================
+
+def clear_stats_cache():
+    """Очистить кеш статистики в Redis"""
+    r, _ = redis_client()
+    if r:
+        r.delete("dashboard:stats")
+        r.delete("dashboard:last_refresh")
+        print("✅ Redis stats cache cleared")
+
+
+def clear_ratings_cache():
+    """Очистить кеш рейтингов в Redis"""
+    r, _ = redis_client()
+    if r:
+        r.delete("dashboard:ratings:club_avg")
+        r.delete("trainers:avg_ratings")
+        print("✅ Redis ratings cache cleared")
+
+
+# ===================================================================
+# ======================= БИЗНЕС-ЛОГИКА (Сервисы) ===================
+# ===================================================================
+
 def get_dashboard_stats():
+    """Получение статистики дашборда с кэшированием в Redis"""
     cache_key = "dashboard:stats"
     cached = None
     redis_error = None
@@ -135,6 +174,7 @@ def get_dashboard_stats():
 
 
 def get_dashboard_ratings():
+    """Получение рейтингов клуба и тренеров с кэшированием в Redis"""
     club_key = "dashboard:ratings:club_avg"
     trainers_hash_key = "trainers:avg_ratings"
     redis_error = None
@@ -146,7 +186,6 @@ def get_dashboard_ratings():
         try:
             raw_club = r.get(club_key)
             raw_trainers = r.hgetall(trainers_hash_key)
-            # hgetall возвращает пустой dict если ключа нет
             if raw_club and raw_trainers:
                 cached_club = json.loads(raw_club)
                 cached_trainers = [
@@ -170,7 +209,6 @@ def get_dashboard_ratings():
     trainers_avg = list(
         feedback_col.aggregate(
             [
-                # Группируем по trainer_id — связующее поле между MongoDB и PostgreSQL
                 {"$group": {
                     "_id": "$trainer_id",
                     "trainer_name": {"$first": "$trainer_name"},
@@ -197,8 +235,6 @@ def get_dashboard_ratings():
     if r:
         try:
             r.setex(club_key, REDIS_TTL_SECONDS, json.dumps(club_avg_rating, ensure_ascii=False))
-            # Сохраняем Hash: поле = trainer_id, значение = JSON с данными тренера
-            # Так Redis явно связан с PostgreSQL и MongoDB через trainer_id
             for row in normalized_trainers:
                 r.hset(trainers_hash_key, str(row["trainer_id"]), json.dumps(row, ensure_ascii=False))
             r.expire(trainers_hash_key, REDIS_TTL_SECONDS)
@@ -211,8 +247,13 @@ def get_dashboard_ratings():
     }, redis_error, False
 
 
+# ===================================================================
+# =========================== МАРШРУТЫ (ROUTES) =====================
+# ===================================================================
+
 @app.route("/")
 def dashboard():
+    """Главная страница — Дашборд"""
     stats, data_error, from_cache = get_dashboard_stats()
     ratings, ratings_error, ratings_from_cache = get_dashboard_ratings()
     return render_template(
@@ -229,6 +270,7 @@ def dashboard():
 
 @app.route("/groups")
 def groups_page():
+    """Страница списка всех групп"""
     rows, error = pg_query(
         """
         SELECT
@@ -250,6 +292,7 @@ def groups_page():
 
 @app.route("/groups/<int:group_id>")
 def group_detail_page(group_id: int):
+    """Детальная страница одной группы и её состава"""
     group_rows, group_error = pg_query(
         f"""
         SELECT
@@ -293,6 +336,7 @@ def group_detail_page(group_id: int):
 
 @app.route("/trainers")
 def trainers_page():
+    """Страница списка тренеров"""
     rows, error = pg_query(
         """
         SELECT
@@ -310,12 +354,13 @@ def trainers_page():
 
 @app.route("/manage", methods=["GET", "POST"])
 def manage_page():
+    """Страница управления (добавление тренеров, групп, участников, событий)"""
     message = None
     error = None
     postgres_ok = True
     mongo_ok = True
 
-    # Получаем данные для форм заранее — они нужны и для GET и внутри POST-блоков
+    # Получаем данные для форм заранее
     arts, arts_error = pg_query("SELECT art_id, name FROM martialarts ORDER BY name")
     trainers, trainers_error = pg_query("SELECT trainer_id, full_name FROM trainers ORDER BY full_name")
     groups, groups_error = pg_query("SELECT group_id, name FROM groups ORDER BY name")
@@ -323,7 +368,7 @@ def manage_page():
     if request.method == "POST":
         action = request.form.get("action", "")
 
-        # ========== ДОБАВЛЕНИЕ ТРЕНЕРА ==========
+        # === ДОБАВЛЕНИЕ ТРЕНЕРА ===
         if action == "add_trainer":
             full_name = request.form.get("full_name", "").strip()
             phone = request.form.get("phone", "").strip()
@@ -342,15 +387,16 @@ def manage_page():
                     postgres_ok = False
                 else:
                     message = f"✅ Тренер '{full_name}' успешно добавлен!"
+                    # ✅ ОЧИЩАЕМ КЕШ СТАТИСТИКИ
+                    clear_stats_cache()
 
-        # ========== ДОБАВЛЕНИЕ ГРУППЫ ==========
+        # === ДОБАВЛЕНИЕ ГРУППЫ ===
         elif action == "add_group":
             name = request.form.get("name", "").strip()
             art_id = request.form.get("art_id", "").strip()
             trainer_id = request.form.get("trainer_id", "").strip()
             level = request.form.get("level", "").strip()
 
-            # Получаем название вида спорта для сообщения
             art_name = ""
             for art in arts:
                 if str(art["art_id"]) == art_id:
@@ -361,7 +407,6 @@ def manage_page():
                 error = "Заполните обязательные поля группы."
             else:
                 trainer_value = int(trainer_id) if trainer_id else None
-                # Проверяем существование группы с таким же названием
                 existing, _ = pg_query(f"SELECT group_id FROM groups WHERE name = '{name}' LIMIT 1")
                 if existing:
                     error = f"Группа с названием '{name}' уже существует."
@@ -375,8 +420,10 @@ def manage_page():
                         postgres_ok = False
                     else:
                         message = f"✅ Группа '{name}' ({art_name}, {level}) успешно добавлена!"
+                        # ✅ ОЧИЩАЕМ КЕШ СТАТИСТИКИ
+                        clear_stats_cache()
 
-        # ========== ДОБАВЛЕНИЕ УЧАСТНИКА В ГРУППУ ==========
+        # === ДОБАВЛЕНИЕ УЧАСТНИКА В ГРУППУ ===
         elif action == "add_member_to_group":
             full_name = request.form.get("member_full_name", "").strip()
             birth_date = request.form.get("birth_date", "").strip()
@@ -387,7 +434,6 @@ def manage_page():
             end_date = request.form.get("end_date", "").strip()
             price = request.form.get("price", "").strip()
 
-            # Получаем название группы для сообщения
             group_name = ""
             for group in groups:
                 if str(group["group_id"]) == group_id:
@@ -400,7 +446,6 @@ def manage_page():
                 try:
                     with connect(PG_DSN, row_factory=dict_row) as conn:
                         with conn.cursor() as cur:
-                            # Проверяем — есть ли уже участник с таким телефоном
                             if phone:
                                 cur.execute("SELECT member_id FROM members WHERE phone = %s LIMIT 1", (phone,))
                                 existing_member = cur.fetchone()
@@ -408,7 +453,6 @@ def manage_page():
                                 existing_member = None
 
                             if existing_member:
-                                # Участник уже есть — проверяем не записан ли он уже в эту группу
                                 member_id = existing_member["member_id"]
                                 cur.execute(
                                     "SELECT subscription_id FROM subscriptions WHERE member_id = %s AND group_id = %s LIMIT 1",
@@ -425,8 +469,9 @@ def manage_page():
                                     )
                                     conn.commit()
                                     message = f"✅ Участник '{full_name}' уже существовал — добавлен в группу '{group_name}' по новому абонементу!"
+                                    # ✅ ОЧИЩАЕМ КЕШ СТАТИСТИКИ
+                                    clear_stats_cache()
                             else:
-                                # Новый участник — создаём и сразу записываем
                                 cur.execute(
                                     """INSERT INTO members (full_name, birth_date, phone, gender)
                                     VALUES (%s, %s, %s, %s) RETURNING member_id""",
@@ -441,12 +486,14 @@ def manage_page():
                                 )
                                 conn.commit()
                                 message = f"✅ Участник '{full_name}' успешно добавлен и записан в группу '{group_name}'!"
-                except Exception as e:
+                                # ✅ ОЧИЩАЕМ КЕШ СТАТИСТИКИ
+                                clear_stats_cache()
+                except Exception:
                     if not error:
                         error = service_error_message("postgres")
                         postgres_ok = False
 
-        # ========== ДОБАВЛЕНИЕ СОБЫТИЯ (MongoDB) ==========
+        # === ДОБАВЛЕНИЕ СОБЫТИЯ В MONGODB ===
         elif action == "add_event":
             events_col, mongo_error = mongo_collection("events")
             if mongo_error:
@@ -462,7 +509,6 @@ def manage_page():
                 else:
                     try:
                         event_dt = datetime.fromisoformat(event_date)
-                        # Проверяем — нет ли уже события с таким названием и датой
                         existing = events_col.find_one({"title": title, "event_date": event_dt})
                         if existing:
                             error = f"Событие '{title}' на эту дату уже существует."
@@ -476,6 +522,7 @@ def manage_page():
                                 }
                             )
                             message = f"✅ Событие '{title}' ({martial_art}) успешно добавлено в MongoDB!"
+                            # События не влияют на статистику, поэтому кеш не чистим
                     except Exception:
                         error = service_error_message("mongo")
                         mongo_ok = False
@@ -502,6 +549,7 @@ def manage_page():
 
 @app.route("/events")
 def events_page():
+    """Страница списка событий (MongoDB)"""
     events_col, error = mongo_collection("events")
     rows = []
     if events_col is not None:
@@ -511,6 +559,7 @@ def events_page():
 
 @app.route("/reviews", methods=["GET", "POST"])
 def reviews_page():
+    """Страница отзывов на тренеров и клуб"""
     message = None
     error = None
 
@@ -524,6 +573,7 @@ def reviews_page():
             rating = int(request.form.get("rating", "0"))
         except ValueError:
             rating = 0
+
         if rating < 1 or rating > 5:
             error = "Оценка должна быть от 1 до 5."
         elif action == "add_trainer_review":
@@ -533,7 +583,6 @@ def reviews_page():
             if not member_name or not trainer_name:
                 error = "Укажите автора и тренера."
             else:
-                # Получаем trainer_id из PostgreSQL — связующее поле между всеми тремя БД
                 id_rows, _ = pg_query(
                     f"SELECT trainer_id FROM trainers WHERE full_name = '{trainer_name}' LIMIT 1"
                 )
@@ -548,7 +597,10 @@ def reviews_page():
                         "created_at": datetime.now(UTC),
                     }
                 )
-                message = "Отзыв на тренера добавлен."
+                message = "✅ Отзыв на тренера добавлен!"
+                # ✅ ОЧИЩАЕМ КЕШ РЕЙТИНГОВ
+                clear_ratings_cache()
+
         elif action == "add_club_review":
             author = request.form.get("author", "").strip()
             comment = request.form.get("comment", "").strip()
@@ -563,7 +615,9 @@ def reviews_page():
                         "created_at": datetime.now(UTC),
                     }
                 )
-                message = "Отзыв на клуб добавлен."
+                message = "✅ Отзыв на клуб добавлен!"
+                # ✅ ОЧИЩАЕМ КЕШ РЕЙТИНГОВ
+                clear_ratings_cache()
 
     trainer_reviews = []
     club_reviews = []
@@ -587,8 +641,7 @@ def reviews_page():
             )
         )
         club_avg = list(
-            club_reviews_col.aggregate([{"$group": {"_id": None, "avg_rating": {"$avg": "$rating"}}}])
-        )
+            club_reviews_col.aggregate([{"$group": {"_id": None, "avg_rating": {"$avg": "$rating"}}}]))
         if club_avg:
             club_avg_rating = float(club_avg[0]["avg_rating"])
 
@@ -610,6 +663,7 @@ def reviews_page():
 
 @app.route("/analytics")
 def analytics_page():
+    """Страница аналитики"""
     pg_rows, pg_error = pg_query(
         """
         SELECT
@@ -627,6 +681,7 @@ def analytics_page():
     club_feedback_col, club_mongo_error = mongo_collection("club_feedback")
     mongo_rows = []
     club_avg_rating = None
+
     if feedback_col is not None:
         pipeline = [
             {"$group": {
@@ -658,6 +713,7 @@ def analytics_page():
 
 @app.route("/status")
 def status_page():
+    """Страница статуса всех подключений"""
     _, pg_error = pg_query("SELECT 1 AS ok")
     _, mongo_error = mongo_collection("events")
     _, redis_error = redis_client()
@@ -673,6 +729,7 @@ def status_page():
 
 @app.route("/api/status")
 def api_status():
+    """API эндпоинт для проверки статуса сервисов"""
     _, pg_error = pg_query("SELECT 1 AS ok")
     _, mongo_error = mongo_collection("events")
     _, redis_error = redis_client()
@@ -685,6 +742,10 @@ def api_status():
         }
     )
 
+
+# ===================================================================
+# ========================== ЗАПУСК ПРИЛОЖЕНИЯ ======================
+# ===================================================================
 
 if __name__ == "__main__":
     app.run(
